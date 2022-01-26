@@ -50,6 +50,52 @@
 
 * 原子化的租借过程  
     当一份租借bid被nft owner接受后，borrower通过一个合约调用完成全部租借动作，包括：铸造借品NFT，支付租借费给nft owner，退还报价押金。
+
+    其中在owner调用`take_offer`合约接口响应`bid`的时候，合约通过`cross contract call`获取nft的链上真实owner进行验证，保证调用者为nft所有者:
+    ```rust
+    ext_contract::nft_token(
+        token_id.to_string(),
+        &token_contract.to_string(),
+        0,
+        GAS_FOR_VIEW,
+    )
+    .then(ext_self::on_nft_token_callback(
+        caller_id.clone(),
+        bid_id,
+        opinion,
+        &env::current_account_id(),
+        0,
+        GAS_FOR_RESOLVE,
+    ))
+    ```
+
+    ```rust
+    #[private]
+    pub fn on_nft_token_callback(&mut self, caller: AccountId, bid_id: u64, opinion: bool) {
+        ...
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Failed => {}
+            PromiseResult::Successful(value) => {
+                let parsed_result = near_sdk::serde_json::from_slice::<Token>(&value);
+                if parsed_result.is_ok() {
+                    let nft_owner = parsed_result.ok().and_then(|token| Some(token.owner_id)).unwrap();
+                    env::log(
+                        format!(
+                            "Checking result --> nft owner: {}, caller: {}",
+                            nft_owner.clone(), caller.clone(),
+                        )
+                        .as_bytes(),
+                    );
+                    assert_eq!(nft_owner, caller, "Err: only owner of the NFT can take offer");
+                    self.internal_take_offer(&caller, bid_id, opinion);
+                }
+            }
+        }
+    }
+    ```
+
+
 * 借品NFT  
     * 通过在metadata的description字段填入NFT统一ID，建立起借品与原件之间的链上关系;
     * 在metadata的title字段填入NFT Never Sleep，标识此为借品NFT;
