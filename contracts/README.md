@@ -77,36 +77,41 @@ fn nft_tokens_for_owner(
 ```rust
 pub enum BidState {
     InProgress,
+    // nft owner accept the bid
     Approved,
+    // nft owner explicit reject the bid
     Rejected,
     Expired,
+    // nft borrower execute the lease
+    Consumed,
 }
-
-pub struct BidInfo {
-    /// the source nft id, with format contract_id:nft_id
+pub struct Bid {
+    // global NFT id
     pub src_nft_id: String,
-    /// the owner of source nft
-    pub orgin_owner: String,
-    /// the start date of lease, timestamp in sec 
+    // nft owner, verified on chain
+    pub origin_owner: String,
+    // start timestamp of the lease
     pub start_at: u32,
-    /// the time duration of the lease in sec
+    // duration in seconds of the lease
     pub lasts: u32,
-    /// total lease fee in NEAR
-    pub amount: U128,
-    /// other infomation from the borrower
+    // total fee of the lease
+    pub amount: Balance,
+    // extra negotiation info
     pub msg: String,
-    /// the borrower account id
+    // bid creator, that is the borrower
     pub bid_from: AccountId,
-    /// see enum BidState
-    pub bid_state: Option<BidState>,
+    pub bid_state: BidState,
+    // bid creation time, used to tell expiration
+    pub create_at: Timestamp,
 }
 ```
 #### offer_bid
 borrower call this to request a lease, and deposit a fixed amount of NEAR as bid endorsement: 
 ```rust
-/// nft_id: the one want to lease
+/// nft_id: the nft want to lease
 /// bid_info: lease details, the bid_state set to None
 /// return bid id
+#[payable]
 pub fn offer_bid(&mut self, nft_id: String, bid_info: BidInfo) -> u64;
 ```
 
@@ -116,7 +121,8 @@ owner call this to respond a lease request:
 /// bid_id: id of the bid
 /// opinion: true means approve, false means reject
 /// need 1 yocto NEAR for secure reason
-pub fn take_offer(&mut self, bid_id: u64, opinion: bool) -> Promise;
+#[payable]
+pub fn take_offer(&mut self, bid_id: u64, opinion: bool) -> Promise
 ```
 
 #### claim_nft
@@ -124,7 +130,8 @@ borrower call this to claim lease NFT on an approved bid.
 borrower should deposit more than amount in approved bid, remaining would be refunded.
 ```rust
 /// bid_id: id of the bid
-pub fn claim_nft(&mut self, bid_id: u64);
+#[payable]
+pub fn claim_nft(&mut self, bid_id: u64) -> Token;
 ```
 
 #### get_bid
